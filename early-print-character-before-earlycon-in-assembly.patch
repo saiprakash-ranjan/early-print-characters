@@ -1,0 +1,55 @@
+diff --git a/arch/arm64/kernel/head.S b/arch/arm64/kernel/head.S
+index 57a91032b4c2..bfffc06bac60 100644
+--- a/arch/arm64/kernel/head.S
++++ b/arch/arm64/kernel/head.S
+@@ -107,6 +107,7 @@ pe_header:
+ 	 */
+ SYM_CODE_START(stext)
+ 	bl	preserve_boot_args
++	bl	early_write_char
+ 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
+ 	adrp	x23, __PHYS_OFFSET
+ 	and	x23, x23, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
+diff --git a/drivers/tty/serial/qcom_geni_serial.c b/drivers/tty/serial/qcom_geni_serial.c
+index 6119090ce045..199d916f4c98 100644
+--- a/drivers/tty/serial/qcom_geni_serial.c
++++ b/drivers/tty/serial/qcom_geni_serial.c
+@@ -18,6 +18,9 @@
+ #include <linux/slab.h>
+ #include <linux/tty.h>
+ #include <linux/tty_flip.h>
++#include <linux/irqchip/arm-gic-v3.h>
++
++#define QCOM_SDM845_GENI_BASE			0x00a84000
+ 
+ /* UART specific GENI registers */
+ #define SE_UART_LOOPBACK_CFG		0x22c
+@@ -362,6 +365,16 @@ static void qcom_geni_serial_poll_put_char(struct uart_port *uport,
+ #endif
+ 
+ #ifdef CONFIG_SERIAL_QCOM_GENI_CONSOLE
++void early_write_char(void)
++{
++	void __iomem *membase = (void __iomem *)QCOM_SDM845_GENI_BASE;
++	u32 m_cmd = (UART_START_TX << M_OPCODE_SHFT);
++
++        writel(1, membase + SE_UART_TX_TRANS_LEN);
++	writel(m_cmd, membase + SE_GENI_M_CMD0);
++	writel('S', membase + SE_GENI_TX_FIFOn);
++}
++
+ static void qcom_geni_serial_wr_char(struct uart_port *uport, int ch)
+ {
+ 	writel(ch, uport->membase + SE_GENI_TX_FIFOn);
+diff --git a/include/linux/irqchip/arm-gic-v3.h b/include/linux/irqchip/arm-gic-v3.h
+index 765d9b769b69..b36b9bc5b9e9 100644
+--- a/include/linux/irqchip/arm-gic-v3.h
++++ b/include/linux/irqchip/arm-gic-v3.h
+@@ -710,6 +710,7 @@ static inline bool gic_enable_sre(void)
+ 	return !!(val & ICC_SRE_EL1_SRE);
+ }
+ 
++extern void early_write_char(void);
+ #endif
+ 
+ #endif
